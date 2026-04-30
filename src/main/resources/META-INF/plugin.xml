@@ -1,0 +1,44 @@
+<idea-plugin>
+    <id>de.nogaemer.i18neditor</id>
+    <name>i18n Strings Editor</name>
+    <vendor>Noah Schwenold</vendor>
+    <description><![CDATA[
+        Visual editor for Lyricist-based Kotlin i18n string files.<br/>
+        Supports editing all locales side-by-side, adding/removing keys,
+        and full PSI-backed rename refactoring (Shift+F6).
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.kotlin</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+                id="i18n Editor"
+                anchor="right"
+                secondary="false"
+                canCloseContents="false"
+                factoryClass="de.nogaemer.i18neditor.toolwindow.I18nToolWindowFactory"/>
+
+        <fileEditorProvider
+                implementation="de.nogaemer.i18neditor.editor.I18nSplitEditorProvider"/>
+
+        <renameHandler
+                implementation="de.nogaemer.i18neditor.refactor.I18nRenameHandler"
+                order="first"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="org.jetbrains.kotlin">
+        <supportsKotlinPluginMode supportsK2="true" supportsK1="true"/>
+    </extensions>
+
+    <actions>
+        <action
+                id="de.nogaemer.i18neditor.OpenI18nEditorAction"
+                class="de.nogaemer.i18neditor.action.OpenI18nEditorAction"
+                text="Open in i18n Editor"
+                description="Open the Lyricist strings file in the visual i18n editor">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu"      anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
