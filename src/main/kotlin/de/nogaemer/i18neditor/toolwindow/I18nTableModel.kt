@@ -70,6 +70,8 @@ class I18nTableModel(private var table: I18nTable) : AbstractTableModel() {
     fun rowForKey(fullPath: String): Int =
         rows.indexOfFirst { it is I18nRow.KeyRow && it.key.fullPath == fullPath }
 
+    fun isGroupHeader(row: Int) = getRow(row) is I18nRow.GroupHeader
+
     // ── Build ─────────────────────────────────────────────────────────────────
 
     private fun buildRows(): List<I18nRow> {

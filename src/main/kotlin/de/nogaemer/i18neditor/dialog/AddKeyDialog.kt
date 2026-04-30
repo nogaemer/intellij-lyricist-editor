@@ -14,7 +14,7 @@ import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-class AddKeyDialog(private val fileModel: I18nFileModel) : DialogWrapper(true) {
+class AddKeyDialog(private val fileModel: I18nFileModel, preselected: I18nGroup? = null) : DialogWrapper(true) {
 
     private val keyNameField    = JBTextField(24)
     private val groupCombo      = ComboBox(fileModel.groups.map { it.className }.toTypedArray())
@@ -40,6 +40,7 @@ class AddKeyDialog(private val fileModel: I18nFileModel) : DialogWrapper(true) {
             lambdaParamField.isEnabled = typeCombo.selectedIndex == 1
         }
         init()
+        preselected?.let { groupCombo.selectedItem = it.className }
     }
 
     override fun createCenterPanel(): JComponent {

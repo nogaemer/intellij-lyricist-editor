@@ -6,13 +6,14 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.JBUI
 import de.nogaemer.i18neditor.model.I18nFileModel
+import de.nogaemer.i18neditor.model.I18nGroup
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-class AddGroupDialog(private val fileModel: I18nFileModel) : DialogWrapper(true) {
+class AddGroupDialog(private val fileModel: I18nFileModel, preselected: I18nGroup? = null) : DialogWrapper(true) {
 
     private val classNameField = JBTextField(24).apply { emptyText.text = "e.g. FooterStrings" }
     private val fieldNameField = JBTextField(24).apply { emptyText.text = "e.g. footer" }
@@ -35,6 +36,10 @@ class AddGroupDialog(private val fileModel: I18nFileModel) : DialogWrapper(true)
         title = "Add New Group"
         setOKButtonText("Add Group")
         init()
+        preselected?.let {
+            val label = it.fieldPath.joinToString(".").ifEmpty { it.className }
+            parentCombo.selectedItem = label
+        }
     }
 
     override fun createCenterPanel(): JComponent {
@@ -42,7 +47,7 @@ class AddGroupDialog(private val fileModel: I18nFileModel) : DialogWrapper(true)
         val gc = GridBagConstraints().apply {
             fill   = GridBagConstraints.HORIZONTAL
             anchor = GridBagConstraints.WEST
-            insets = JBUI.insets(4, 4, 4, 4)
+            insets = JBUI.insets(4)
         }
         fun row(label: String, comp: JComponent, r: Int) {
             gc.gridx = 0; gc.gridy = r; gc.weightx = 0.0

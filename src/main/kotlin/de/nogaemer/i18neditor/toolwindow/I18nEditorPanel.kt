@@ -1,24 +1,19 @@
 package de.nogaemer.i18neditor.toolwindow
 
+import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
-import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionPlaces
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
-import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiManager
 import com.intellij.ui.Gray
 import com.intellij.ui.JBColor
@@ -32,6 +27,7 @@ import de.nogaemer.i18neditor.dialog.AddGroupDialog
 import de.nogaemer.i18neditor.dialog.AddKeyDialog
 import de.nogaemer.i18neditor.dialog.AddLocaleDialog
 import de.nogaemer.i18neditor.dialog.EditLambdaParamsDialog
+import de.nogaemer.i18neditor.model.I18nGroup
 import de.nogaemer.i18neditor.model.I18nKey
 import de.nogaemer.i18neditor.parser.LyricistFileParser
 import de.nogaemer.i18neditor.writer.*
@@ -57,6 +53,9 @@ class I18nEditorPanel(
     private val localeAdder = LyricistLocaleAdder(project)
     private val localeDeleter = LyricistLocaleDeleter(project)
     private val converter = LyricistKeyConverter(project)
+
+    private val addIcon = AllIcons.General.Add
+    private var groupAddButtonClicked = false
 
     private var currentTable = parser.parse(virtualFile)
     private lateinit var tableModel: I18nTableModel
@@ -94,7 +93,26 @@ class I18nEditorPanel(
         val t = currentTable ?: return
         tableModel = I18nTableModel(t)
 
-        jbTable = JBTable(tableModel).apply {
+        jbTable = object : JBTable(tableModel) {
+
+            override fun paint(g: Graphics) {
+                super.paint(g)
+                val g2 = g as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                val pane = javax.swing.CellRendererPane()
+                for (row in 0 until rowCount) {
+                    if (!tableModel.isGroupHeader(row)) continue
+                    val rect = super.getCellRect(row, 0, true)
+                    val renderer = prepareRenderer(getDefaultRenderer(Any::class.java), row, 0)
+                    pane.paintComponent(g2, renderer, this, 0, rect.y, width, rect.height, true)
+
+                    val btnX = width - addIcon.iconWidth - 8
+                    val btnY = rect.y + (rect.height - addIcon.iconHeight) / 2
+                    addIcon.paintIcon(this, g2, btnX, btnY)
+                }
+            }
+
+        }.apply {
             setDefaultRenderer(Any::class.java, I18nCellRenderer())
             setDefaultEditor(Any::class.java, I18nCellEditor())
             tableHeader.reorderingAllowed = false
@@ -133,6 +151,21 @@ class I18nEditorPanel(
 
             // Navigate locale value on mousePressed (before editor starts)
             override fun mousePressed(e: MouseEvent) {
+                // "+" button hit detection on group header rows
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    val row = jbTable.rowAtPoint(e.point)
+                    if (row >= 0 && tableModel.isGroupHeader(row)) {
+                        val btnX = jbTable.width - addIcon.iconWidth - 8
+                        if (e.x in btnX..(btnX + addIcon.iconWidth)) {
+                            val r = tableModel.getRow(row) as I18nRow.GroupHeader
+                            groupAddButtonClicked = true
+                            showGroupAddPopup(e, r)
+                            e.consume()
+                            return
+                        }
+                    }
+                }
+
                 maybeShowRowPopup(e)
                 if (e.isPopupTrigger || !SwingUtilities.isLeftMouseButton(e)) return
                 val row = jbTable.rowAtPoint(e.point)
@@ -148,15 +181,20 @@ class I18nEditorPanel(
             override fun mouseReleased(e: MouseEvent) = maybeShowRowPopup(e)
 
             override fun mouseClicked(e: MouseEvent) {
+                if (groupAddButtonClicked) {
+                    groupAddButtonClicked = false; return
+                }
                 val row = jbTable.rowAtPoint(e.point)
                 if (row < 0) return
                 when (val r = tableModel.getRow(row)) {
                     is I18nRow.GroupHeader ->
                         if (e.clickCount == 1 && !SwingUtilities.isRightMouseButton(e))
                             tableModel.toggleCollapse(row)
+
                     is I18nRow.KeyRow ->
                         if (e.clickCount == 2 && SwingUtilities.isLeftMouseButton(e)
-                            && jbTable.columnAtPoint(e.point) == 0)
+                            && jbTable.columnAtPoint(e.point) == 0
+                        )
                             navigateToKey(r.key)
                 }
             }
@@ -170,6 +208,7 @@ class I18nEditorPanel(
                 showKeyPopup(e, r.key)
             }
         })
+
         // ── Mouse: right-click column header → delete language ────────────────
         jbTable.tableHeader.addMouseListener(object : MouseAdapter() {
             override fun mousePressed(e: MouseEvent) = maybeShowColMenu(e)
@@ -189,25 +228,25 @@ class I18nEditorPanel(
             .setRemoveAction { onDeleteKey() }
             .addExtraAction(object : AnAction(
                 "Add Group", "Add a new string group",
-                com.intellij.icons.AllIcons.Actions.NewFolder
+                AllIcons.Actions.NewFolder
             ) {
                 override fun actionPerformed(e: AnActionEvent) = onAddGroup()
             })
             .addExtraAction(object : AnAction(
                 "Add Language", "Add a new locale",
-                com.intellij.icons.AllIcons.Actions.AddList
+                AllIcons.Actions.AddList
             ) {
                 override fun actionPerformed(e: AnActionEvent) = onAddLocale()
             })
             .addExtraAction(object : AnAction(
                 "Rename Key", "Rename selected key (Shift+F6)",
-                com.intellij.icons.AllIcons.Actions.Edit
+                AllIcons.Actions.Edit
             ) {
                 override fun actionPerformed(e: AnActionEvent) = onRenameKey()
             })
             .addExtraAction(object : AnAction(
                 "Refresh", "Re-parse strings file",
-                com.intellij.icons.AllIcons.Actions.Refresh
+                AllIcons.Actions.Refresh
             ) {
                 override fun actionPerformed(e: AnActionEvent) = refresh()
             })
@@ -216,14 +255,38 @@ class I18nEditorPanel(
         add(decorated, BorderLayout.CENTER)
     }
 
-    // ── Modern popups (JBPopupFactory → rounded IntelliJ style) ──────────────
+    // ── Popups ────────────────────────────────────────────────────────────────
+
+    private fun showGroupAddPopup(e: MouseEvent, header: I18nRow.GroupHeader) {
+        val group = DefaultActionGroup()
+        group.add(object : AnAction(
+            "Add Key in ${header.group.className}…", null,
+            AllIcons.Actions.AddFile
+        ) {
+            override fun actionPerformed(ev: AnActionEvent) = onAddKey(header.group)
+        })
+        group.add(object : AnAction(
+            "Add Subgroup in ${header.group.className}…", null,
+            AllIcons.Actions.NewFolder
+        ) {
+            override fun actionPerformed(ev: AnActionEvent) = onAddGroup(header.group)
+        })
+        JBPopupFactory.getInstance()
+            .createActionGroupPopup(
+                null, group,
+                DataManager.getInstance().getDataContext(jbTable),
+                JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
+                false
+            )
+            .show(RelativePoint(e))
+    }
 
     private fun showKeyPopup(e: MouseEvent, key: I18nKey) {
         val group = DefaultActionGroup()
 
         group.add(object : AnAction(
             "Rename Key…  (Shift+F6)", null,
-            com.intellij.icons.AllIcons.Actions.Edit
+            AllIcons.Actions.Edit
         ) {
             override fun actionPerformed(ev: AnActionEvent) = onRenameKey()
         })
@@ -232,20 +295,20 @@ class I18nEditorPanel(
         if (!key.isLambda) {
             group.add(object : AnAction(
                 "Convert to Lambda…", null,
-                com.intellij.icons.AllIcons.Nodes.Lambda
+                AllIcons.Nodes.Lambda
             ) {
                 override fun actionPerformed(ev: AnActionEvent) = showLambdaParamDialog(key)
             })
         } else {
             group.add(object : AnAction(
                 "Edit Lambda Params…", null,
-                com.intellij.icons.AllIcons.Nodes.Lambda
+                AllIcons.Nodes.Lambda
             ) {
                 override fun actionPerformed(ev: AnActionEvent) = showLambdaParamDialog(key)
             })
             group.add(object : AnAction(
                 "Convert to Plain String", null,
-                com.intellij.icons.AllIcons.Nodes.Field
+                AllIcons.Nodes.Field
             ) {
                 override fun actionPerformed(ev: AnActionEvent) {
                     converter.convertToString(virtualFile, key); refresh()
@@ -256,16 +319,16 @@ class I18nEditorPanel(
         group.addSeparator()
         group.add(object : AnAction(
             "Delete Key", null,
-            com.intellij.icons.AllIcons.Actions.GC
+            AllIcons.Actions.GC
         ) {
             override fun actionPerformed(ev: AnActionEvent) = onDeleteKey()
         })
 
-        com.intellij.openapi.ui.popup.JBPopupFactory.getInstance()
+        JBPopupFactory.getInstance()
             .createActionGroupPopup(
                 null, group,
                 DataManager.getInstance().getDataContext(jbTable),
-                com.intellij.openapi.ui.popup.JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
+                JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
                 false
             )
             .show(RelativePoint(e))
@@ -275,7 +338,7 @@ class I18nEditorPanel(
         val group = DefaultActionGroup()
         group.add(object : AnAction(
             "Delete Language '$localeTag'", null,
-            com.intellij.icons.AllIcons.Actions.GC
+            AllIcons.Actions.GC
         ) {
             override fun actionPerformed(ev: AnActionEvent) {
                 val ok = Messages.showYesNoDialog(
@@ -290,11 +353,11 @@ class I18nEditorPanel(
                 }
             }
         })
-        com.intellij.openapi.ui.popup.JBPopupFactory.getInstance()
+        JBPopupFactory.getInstance()
             .createActionGroupPopup(
                 null, group,
                 DataManager.getInstance().getDataContext(jbTable.tableHeader),
-                com.intellij.openapi.ui.popup.JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
+                JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
                 false
             )
             .show(RelativePoint(e))
@@ -328,15 +391,12 @@ class I18nEditorPanel(
                 }
             } ?: return
 
-        val rootCall = localeVal.initializer
-                as? KtCallExpression ?: return
+        val rootCall = localeVal.initializer as? KtCallExpression ?: return
 
-        // Recursively find the KtCallExpression whose callee == key.groupClass
         fun findGroupCall(call: KtCallExpression): KtCallExpression? {
             if (call.calleeExpression?.text == key.groupClass) return call
             for (arg in call.valueArguments) {
-                val nested = arg.getArgumentExpression()
-                        as? KtCallExpression ?: continue
+                val nested = arg.getArgumentExpression() as? KtCallExpression ?: continue
                 val found = findGroupCall(nested)
                 if (found != null) return found
             }
@@ -364,9 +424,9 @@ class I18nEditorPanel(
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
-    private fun onAddKey() {
+    private fun onAddKey(preselected: I18nGroup? = null) {
         val t = currentTable ?: return
-        val dialog = AddKeyDialog(t.model)
+        val dialog = AddKeyDialog(t.model, preselected)
         if (!dialog.showAndGet()) return
         adder.addKey(
             virtualFile = virtualFile,
@@ -385,9 +445,9 @@ class I18nEditorPanel(
         }
     }
 
-    private fun onAddGroup() {
+    private fun onAddGroup(preselected: I18nGroup? = null) {
         val t = currentTable ?: return
-        val dialog = AddGroupDialog(t.model)
+        val dialog = AddGroupDialog(t.model, preselected)
         if (!dialog.showAndGet()) return
         groupAdder.addGroup(
             virtualFile = virtualFile,
@@ -555,7 +615,7 @@ class I18nEditorPanel(
         override fun getCellEditorValue(): Any = field.text
 
         override fun stopCellEditing(): Boolean {
-            val row = editingRow;
+            val row = editingRow
             val col = editingCol
             if (row >= 0 && col > 0) {
                 val r = tableModel.getRow(row) as? I18nRow.KeyRow
