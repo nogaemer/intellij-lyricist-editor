@@ -26,6 +26,25 @@ data class GameStrings(
     val scoreLabel: String,
     val playerGreeting: (String) -> String,
     val scoreFormat: (Int, Int) -> String,
+    val level: LevelStrings,
+)
+
+data class LevelStrings(
+    val current: String,
+    val next: String,
+    val details: LevelDetails,
+)
+
+data class LevelDetails(
+    val name: String,
+    val test: String,
+    val description: String,
+    val bonus: BonusInfo,
+)
+
+data class BonusInfo(
+    val title: String,
+    val multiplierFormat: (Int) -> String,
 )
 
 @LyricistStrings(languageTag = "en", default = true)
@@ -43,9 +62,22 @@ val EnStrings = Strings(
     ),
     game = GameStrings(
         roundLabel = "Round",
-        scoreLabel = "Score",
+        scoreLabel = "Scores",
         playerGreeting = { name -> "Hey $name, good luck!" },
         scoreFormat = { correct, total -> "$correct / $total" },
+        level = LevelStrings(
+            current = "Current Level: Forest",
+            next = "Next Level: Cave",
+            details = LevelDetails(
+                name = "Forest of Beginnings",
+                description = "A dense forest with simple enemies.",
+                test = ",",
+                bonus = BonusInfo(
+                    title = "Bonus stage!",
+                    multiplierFormat = { multiplier -> "x$multiplier points" }
+                )
+            )
+        )
     ),
 )
 
@@ -67,5 +99,18 @@ val DeStrings = Strings(
         scoreLabel = "Punkte",
         playerGreeting = { name -> "Hey $name, viel Erfolg!" },
         scoreFormat = { correct, total -> "$correct / $total" },
+        level = LevelStrings(
+            current = "Aktuelles Level: Wald",
+            next = "Nächstes Level: Höhle",
+            details = LevelDetails(
+                name = "Wald der Anfänge",
+                description = "Ein dichter Wald mit einfachen Gegnern.",
+                test = ",",
+                bonus = BonusInfo(
+                    title = "Bonuslevel!",
+                    multiplierFormat = { multiplier -> "$multiplier-fache Punkte" }
+                )
+            )
+        )
     ),
 )

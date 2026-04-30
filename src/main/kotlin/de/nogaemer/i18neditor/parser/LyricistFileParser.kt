@@ -147,16 +147,17 @@ class LyricistFileParser(private val project: Project) {
      * Everything else becomes a leaf [I18nKey].
      */
     private fun collectGroups(
-        ktClass:         KtClass,
-        dataClasses:     Map<String, KtClass>,
-        pathSoFar:       List<String>,
-        result:          MutableList<I18nGroup>,
-        defaultCallExpr: KtCallExpression?       // ← new param
+        ktClass: KtClass,
+        dataClasses: Map<String, KtClass>,
+        pathSoFar: List<String>,
+        result: MutableList<I18nGroup>,
+        defaultCallExpr: KtCallExpression?
     ) {
-        val params   = ktClass.primaryConstructor?.valueParameters ?: return
+        val params = ktClass.primaryConstructor?.valueParameters ?: return
         val leafKeys = mutableListOf<I18nKey>()
+        // Collect nested groups as (paramName, nestedClass, nestedCall) to recurse AFTER
+        val nestedGroups = mutableListOf<Triple<String, KtClass, KtCallExpression?>>()
 
-        // Build a quick lookup of argName → expression for this level of the default locale
         val defaultArgs: Map<String, KtExpression?> = defaultCallExpr
             ?.valueArguments
             ?.associate { arg ->
@@ -165,62 +166,66 @@ class LyricistFileParser(private val project: Project) {
 
         for (param in params) {
             val paramName = param.name ?: continue
-            val typeText  = param.typeReference?.text?.trim()?.removeSuffix("?") ?: continue
+            val typeText = param.typeReference?.text?.trim()?.removeSuffix("?") ?: continue
 
             when {
                 dataClasses.containsKey(typeText) -> {
-                    // Find the nested call for this param in the default locale
                     val nestedCall = defaultArgs[paramName] as? KtCallExpression
-                    collectGroups(
-                        ktClass         = dataClasses[typeText]!!,
-                        dataClasses     = dataClasses,
-                        pathSoFar       = pathSoFar + paramName,
-                        result          = result,
-                        defaultCallExpr = nestedCall          // ← pass down
-                    )
+                    nestedGroups += Triple(paramName, dataClasses[typeText]!!, nestedCall)
                 }
 
                 typeText.contains("->") -> {
-                    // Extract param names from the default locale's lambda argument
                     val defaultArg = defaultArgs[paramName]
                     val lambdaParams = extractLambdaParams(param.typeReference, defaultArg)
-
                     leafKeys += I18nKey(
-                        name         = paramName,
-                        fullPath     = (pathSoFar + paramName).joinToString("."),
-                        groupClass   = ktClass.name ?: "",
-                        isLambda     = true,
+                        name = paramName,
+                        fullPath = (pathSoFar + paramName).joinToString("."),
+                        groupClass = ktClass.name ?: "",
+                        isLambda = true,
                         lambdaParams = lambdaParams
                     )
                 }
 
                 typeText.startsWith("Map<") || typeText.startsWith("Map ") -> {
                     leafKeys += I18nKey(
-                        name       = paramName,
-                        fullPath   = (pathSoFar + paramName).joinToString("."),
+                        name = paramName,
+                        fullPath = (pathSoFar + paramName).joinToString("."),
                         groupClass = ktClass.name ?: "",
-                        isMap      = true
+                        isMap = true
                     )
                 }
 
                 else -> {
                     leafKeys += I18nKey(
-                        name       = paramName,
-                        fullPath   = (pathSoFar + paramName).joinToString("."),
+                        name = paramName,
+                        fullPath = (pathSoFar + paramName).joinToString("."),
                         groupClass = ktClass.name ?: ""
                     )
                 }
             }
         }
 
+        // Emit this group's own keys FIRST, before any nested groups
         if (leafKeys.isNotEmpty()) {
             result += I18nGroup(
                 className = ktClass.name ?: "",
                 fieldPath = pathSoFar,
-                keys      = leafKeys
+                keys = leafKeys
+            )
+        }
+
+        // Then recurse into nested groups in declaration order
+        for ((paramName, nestedClass, nestedCall) in nestedGroups) {
+            collectGroups(
+                ktClass = nestedClass,
+                dataClasses = dataClasses,
+                pathSoFar = pathSoFar + paramName,
+                result = result,
+                defaultCallExpr = nestedCall
             )
         }
     }
+
     // ── Value pass ────────────────────────────────────────────────────────────
 
     /**
