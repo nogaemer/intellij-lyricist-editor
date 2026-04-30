@@ -44,7 +44,7 @@ class LyricistStringWriter(private val project: Project) {
 
             // Build replacement expression
             val newExprSrc = if (key.isLambda) {
-                val params = key.lambdaParams.joinToString(", ")
+                val params = key.lambdaParams.joinToString(", ") { it.substringBefore(":").trim() }
                 "{ $params -> \"$escaped\" }"
             } else {
                 "\"$escaped\""

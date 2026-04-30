@@ -45,6 +45,7 @@ data class LevelDetails(
 data class BonusInfo(
     val title: String,
     val multiplierFormat: (Int) -> String,
+    val test: (Int, String) -> String,
 )
 
 @LyricistStrings(languageTag = "en", default = true)
@@ -74,7 +75,8 @@ val EnStrings = Strings(
                 test = ",",
                 bonus = BonusInfo(
                     title = "Bonus stage!",
-                    multiplierFormat = { multiplier -> "x$multiplier points" }
+                    multiplierFormat = { multiplier -> "x$multiplier points" },
+                    test = { test, test2 -> "$test + $test2" }
                 )
             )
         )
@@ -108,7 +110,8 @@ val DeStrings = Strings(
                 test = ",",
                 bonus = BonusInfo(
                     title = "Bonuslevel!",
-                    multiplierFormat = { multiplier -> "$multiplier-fache Punkte" }
+                    multiplierFormat = { multiplier -> "$multiplier-fache Punkte" },
+                    test = { test, test2 -> "$test + $test2" }
                 )
             )
         )

@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.1.0"
+    id("org.jetbrains.kotlin.jvm") version "2.3.0"
     id("org.jetbrains.intellij.platform") version "2.10.4"
 }
 
@@ -20,7 +20,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        intellijIdeaCommunity("2024.3")
+        intellijIdea("2025.3")
         bundledPlugin("org.jetbrains.kotlin")  // Kotlin PSI + rename refactoring
         instrumentationTools()
     }
@@ -30,7 +30,7 @@ intellijPlatform {
     pluginConfiguration {
         name.set("i18n Strings Editor")
         ideaVersion {
-            sinceBuild = "243"
+            sinceBuild = "253"
             untilBuild = provider { null }
         }
         changeNotes = """

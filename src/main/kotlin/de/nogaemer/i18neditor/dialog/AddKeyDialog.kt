@@ -20,16 +20,24 @@ class AddKeyDialog(private val fileModel: I18nFileModel, preselected: I18nGroup?
     private val groupCombo      = ComboBox(fileModel.groups.map { it.className }.toTypedArray())
     private val typeCombo       = ComboBox(arrayOf("String", "Lambda"))
     private val lambdaParamField = JBTextField(24).apply {
-        emptyText.text = "e.g. teamName, score"
-        isEnabled      = false
+        emptyText.text = "e.g. wins: Int, total: Int"
+        isEnabled = false
     }
+    private val lambdaReturnTypeField = JBTextField(12).apply {
+        emptyText.text = "String"
+        text = "String"
+        isEnabled = false
+    }
+    val lambdaParams: List<String>
+        get() = lambdaParamField.text.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    val lambdaReturnType: String
+        get() = lambdaReturnTypeField.text.trim().ifEmpty { "String" }
+
     private val valueFields = fileModel.locales.associateWith { JBTextField(24) }
 
     val keyName:       String    get() = keyNameField.text.trim()
     val selectedGroup: I18nGroup get() = fileModel.groups[groupCombo.selectedIndex]
     val isLambda:      Boolean   get() = typeCombo.selectedIndex == 1
-    val lambdaParams:  List<String>
-        get() = lambdaParamField.text.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     val valuesByLocale: Map<String, String>
         get() = valueFields.entries.associate { (l, f) -> l.tag to f.text.trim() }
 
@@ -37,7 +45,9 @@ class AddKeyDialog(private val fileModel: I18nFileModel, preselected: I18nGroup?
         title = "Add New String Key"
         setOKButtonText("Add Key")
         typeCombo.addActionListener {
-            lambdaParamField.isEnabled = typeCombo.selectedIndex == 1
+            val on = typeCombo.selectedIndex == 1
+            lambdaParamField.isEnabled = on
+            lambdaReturnTypeField.isEnabled = on
         }
         init()
         preselected?.let { groupCombo.selectedItem = it.className }
@@ -61,7 +71,8 @@ class AddKeyDialog(private val fileModel: I18nFileModel, preselected: I18nGroup?
         row("Group:",            groupCombo,       0)
         row("Key name:",         keyNameField,     1)
         row("Type:",             typeCombo,        2)
-        row("Lambda params:",    lambdaParamField, 3)
+        row("Lambda params:",   lambdaParamField,       3)
+        row("Return type:",     lambdaReturnTypeField,  4)
 
         gc.gridx = 0; gc.gridy = 4; gc.gridwidth = 2; gc.weightx = 1.0
         panel.add(JBLabel("Initial values:").apply {
@@ -85,8 +96,15 @@ class AddKeyDialog(private val fileModel: I18nFileModel, preselected: I18nGroup?
             return ValidationInfo("Must be a valid Kotlin identifier", keyNameField)
         if (selectedGroup.keys.any { it.name == keyName })
             return ValidationInfo("'$keyName' already exists in ${selectedGroup.className}", keyNameField)
-        if (isLambda && lambdaParams.isEmpty())
-            return ValidationInfo("Provide at least one lambda parameter name", lambdaParamField)
+        if (isLambda) {
+            if (lambdaParams.isEmpty())
+                return ValidationInfo("Provide at least one parameter", lambdaParamField)
+            val paramRegex = Regex("[a-z][a-zA-Z0-9]*\\s*:\\s*[A-Z][a-zA-Z0-9<>?,\\s]*")
+            if (lambdaParams.any { !it.matches(paramRegex) })
+                return ValidationInfo("Format must be 'name: Type' (e.g. score: Int)", lambdaParamField)
+            if (lambdaReturnType.isEmpty())
+                return ValidationInfo("Return type cannot be empty", lambdaReturnTypeField)
+        }
         return null
     }
 }

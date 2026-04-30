@@ -19,7 +19,8 @@ class LyricistKeyConverter(private val project: Project) {
     fun convertToLambda(
         virtualFile:  VirtualFile,
         key:          I18nKey,
-        lambdaParams: List<String>
+        lambdaParams: List<String>,
+        lambdaReturnType: String = "String"
     ) {
         val ktFile  = PsiManager.getInstance(project).findFile(virtualFile) as? KtFile ?: return
         val factory = KtPsiFactory(project)
@@ -37,9 +38,10 @@ class LyricistKeyConverter(private val project: Project) {
                 ?.firstOrNull { it.name == key.name }
                 ?: return@runWriteCommandAction
 
-            val paramTypes = lambdaParams.joinToString(", ") { "String" }
-            val newTypeRef = factory.createType("($paramTypes) -> String")
+            val types = lambdaParams.joinToString(", ") { it.substringAfter(":").trim().ifEmpty { "String" } }
+            val newTypeRef = factory.createType("($types) -> $lambdaReturnType")
             param.typeReference?.replace(newTypeRef)
+
 
             // ── 2. Wrap / rewrap every locale val's argument ──────────────────
             val localeProps = ktFile.declarations

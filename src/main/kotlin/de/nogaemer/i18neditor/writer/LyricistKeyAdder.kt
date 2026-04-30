@@ -19,21 +19,21 @@ class LyricistKeyAdder(private val project: Project) {
         keyName: String,
         valuesByLocaleTag: Map<String, String>,
         isLambda: Boolean = false,
-        lambdaParams: List<String> = emptyList()
+        lambdaParams: List<String> = emptyList(),
+        lambdaReturnType: String = "String"
     ) {
-        val ktFile  = PsiManager.getInstance(project).findFile(virtualFile) as? KtFile ?: return
+        val ktFile = PsiManager.getInstance(project).findFile(virtualFile) as? KtFile ?: return
         val factory = KtPsiFactory(project)
-        val ws      = PsiParserFacade.getInstance(project).createWhiteSpaceFromText("\n    ")
+        val ws = PsiParserFacade.getInstance(project).createWhiteSpaceFromText("\n    ")
 
         WriteCommandAction.runWriteCommandAction(project, "Add i18n Key", null, {
 
             // ── 1. Build the parameter type string ────────────────────────────
             val typeStr = if (isLambda) {
-                val paramTypes = lambdaParams.joinToString(", ") { "String" }
-                "($paramTypes) -> String"
-            } else {
-                "String"
-            }
+                val types = lambdaParams.joinToString(", ") { it.substringAfter(":").trim().ifEmpty { "String" } }
+                "($types) -> $lambdaReturnType"
+            } else "String"
+
 
             // ── 2. Insert parameter into the data class ───────────────────────
             val dataClass = ktFile.declarations
@@ -44,7 +44,7 @@ class LyricistKeyAdder(private val project: Project) {
             val paramList = dataClass.primaryConstructor?.valueParameterList
                 ?: return@runWriteCommandAction
 
-            val newParam  = factory.createParameter("val $keyName: $typeStr")
+            val newParam = factory.createParameter("val $keyName: $typeStr")
             val lastParam = paramList.parameters.lastOrNull()
 
             if (lastParam != null) {
@@ -65,28 +65,26 @@ class LyricistKeyAdder(private val project: Project) {
 
             for (prop in localeProps) {
                 val localeTag = extractLocaleTag(prop) ?: continue
-                val rawValue  = valuesByLocaleTag[localeTag] ?: ""
-                val escaped   = rawValue.escapeForKotlinString()
+                val rawValue = valuesByLocaleTag[localeTag] ?: ""
+                val escaped = rawValue.escapeForKotlinString()
 
                 val rootCall = prop.initializer as? KtCallExpression ?: continue
-                val target   = navigateToCallExpr(rootCall, group.fieldPath) ?: continue
-                val argList  = target.valueArgumentList ?: continue
+                val target = navigateToCallExpr(rootCall, group.fieldPath) ?: continue
+                val argList = target.valueArgumentList ?: continue
 
                 // Build the argument expression depending on type
                 val argValueSrc = if (isLambda) {
-                    val paramNames = lambdaParams.joinToString(", ")
-                    "{ $paramNames -> \"$escaped\" }"
-                } else {
-                    "\"$escaped\""
-                }
+                    val names = lambdaParams.joinToString(", ") { it.substringBefore(":").trim() }
+                    "{ $names -> \"$escaped\" }"
+                } else "\"$escaped\""
 
-                val dummy  = factory.createExpression(
+                val dummy = factory.createExpression(
                     "dummy($keyName = $argValueSrc)"
                 ) as? KtCallExpression ?: continue
                 val newArg = dummy.valueArguments.firstOrNull() ?: continue
 
                 val lastArg = argList.arguments.lastOrNull()
-                val wsArg   = PsiParserFacade.getInstance(project)
+                val wsArg = PsiParserFacade.getInstance(project)
                     .createWhiteSpaceFromText("\n        ")
 
                 if (lastArg != null) {

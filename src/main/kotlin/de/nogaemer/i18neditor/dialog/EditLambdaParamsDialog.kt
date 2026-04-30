@@ -13,13 +13,21 @@ import javax.swing.JPanel
 
 class EditLambdaParamsDialog(key: I18nKey) : DialogWrapper(true) {
 
-    private val paramsField = JBTextField(24).apply {
-        text       = key.lambdaParams.joinToString(", ")
-        emptyText.text = "e.g. teamName, score"
+    private val paramField = JBTextField(24).apply {
+        emptyText.text = "e.g. wins: Int, total: Int"
+        text = key.lambdaParams.joinToString(", ")
+    }
+    private val returnTypeField = JBTextField(12).apply {
+        emptyText.text = "String"
+        text = key.lambdaReturnType.ifEmpty { "String" }
     }
 
+
     val lambdaParams: List<String>
-        get() = paramsField.text.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        get() = paramField.text.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    val lambdaReturnType: String
+        get() = returnTypeField.text.trim().ifEmpty { "String" }
+
 
     init {
         title = if (key.isLambda) "Edit Lambda Parameters" else "Convert to Lambda"
@@ -30,29 +38,28 @@ class EditLambdaParamsDialog(key: I18nKey) : DialogWrapper(true) {
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(GridBagLayout()).apply { border = JBUI.Borders.empty(4, 0) }
         val gc = GridBagConstraints().apply {
-            fill   = GridBagConstraints.HORIZONTAL
+            fill = GridBagConstraints.HORIZONTAL
             anchor = GridBagConstraints.WEST
             insets = JBUI.insets(4, 4, 4, 4)
         }
-        gc.gridx = 0; gc.gridy = 0; gc.weightx = 0.0
-        panel.add(JBLabel("Parameter names:"), gc)
-        gc.gridx = 1; gc.weightx = 1.0
-        panel.add(paramsField, gc)
-
-        gc.gridx = 0; gc.gridy = 1; gc.gridwidth = 2; gc.weightx = 1.0
-        panel.add(JBLabel("<html><small>Comma-separated. Used in template as \$paramName</small></html>").apply {
-            foreground = JBUI.CurrentTheme.Label.disabledForeground()
-            border     = JBUI.Borders.emptyTop(4)
-        }, gc)
+        fun row(label: String, comp: JComponent, r: Int) {
+            gc.gridx = 0; gc.gridy = r; gc.weightx = 0.0
+            panel.add(JBLabel(label), gc)
+            gc.gridx = 1; gc.weightx = 1.0
+            panel.add(comp, gc)
+        }
+        row("Parameters:", paramField,       0)
+        row("Return type:", returnTypeField, 1)
         return panel
     }
 
     override fun doValidate(): ValidationInfo? {
         if (lambdaParams.isEmpty())
-            return ValidationInfo("Provide at least one parameter name", paramsField)
-        val invalid = lambdaParams.firstOrNull { !it.matches(Regex("[a-zA-Z][a-zA-Z0-9_]*")) }
-        if (invalid != null)
-            return ValidationInfo("'$invalid' is not a valid Kotlin identifier", paramsField)
+            return ValidationInfo("Provide at least one parameter", paramField)
+        val paramRegex = Regex("[a-z][a-zA-Z0-9]*\\s*:\\s*[A-Z][a-zA-Z0-9<>?,\\s]*")
+        if (lambdaParams.any { !it.matches(paramRegex) })
+            return ValidationInfo("Format must be 'name: Type' (e.g. score: Int)", paramField)
         return null
     }
+
 }

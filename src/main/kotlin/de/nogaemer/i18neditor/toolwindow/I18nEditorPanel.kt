@@ -27,9 +27,11 @@ import de.nogaemer.i18neditor.dialog.AddGroupDialog
 import de.nogaemer.i18neditor.dialog.AddKeyDialog
 import de.nogaemer.i18neditor.dialog.AddLocaleDialog
 import de.nogaemer.i18neditor.dialog.EditLambdaParamsDialog
+import de.nogaemer.i18neditor.icons.MyIcons
 import de.nogaemer.i18neditor.model.I18nGroup
 import de.nogaemer.i18neditor.model.I18nKey
 import de.nogaemer.i18neditor.parser.LyricistFileParser
+import de.nogaemer.i18neditor.util.LockManager
 import de.nogaemer.i18neditor.writer.*
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClass
@@ -87,6 +89,20 @@ class I18nEditorPanel(
         busConnection?.disconnect()
     }
 
+    // ── Locking ────────────────────────────────────────────────────────────────
+
+    private fun onToggleLock() {
+        val row = jbTable.selectedRow
+        if (row < 0) return
+        val path = when (val r = tableModel.getRow(row)) {
+            is I18nRow.KeyRow     -> r.key.fullPath
+            is I18nRow.GroupHeader -> r.group.fieldPath.joinToString(".")
+        }
+        LockManager.toggle(virtualFile, path)
+        jbTable.repaint()
+    }
+
+
     // ── Build ─────────────────────────────────────────────────────────────────
 
     private fun buildUI() {
@@ -94,6 +110,13 @@ class I18nEditorPanel(
         tableModel = I18nTableModel(t)
 
         jbTable = object : JBTable(tableModel) {
+            override fun isCellEditable(row: Int, column: Int): Boolean {
+                if (column == 0) return false
+                if (tableModel.isGroupHeader(row)) return false
+                if (tableModel.isLocked(row, virtualFile)) return false
+                return super.isCellEditable(row, column)
+            }
+
 
             override fun paint(g: Graphics) {
                 super.paint(g)
@@ -145,6 +168,7 @@ class I18nEditorPanel(
                 if (jbTable.isEditing) jbTable.cellEditor?.cancelCellEditing()
             }
         })
+
 
         // ── Mouse: row clicks + right-click popup ─────────────────────────────
         jbTable.addMouseListener(object : MouseAdapter() {
@@ -245,6 +269,20 @@ class I18nEditorPanel(
                 override fun actionPerformed(e: AnActionEvent) = onRenameKey()
             })
             .addExtraAction(object : AnAction(
+                "Lock / Unlock", "Lock selected key or group from editing",
+                MyIcons.Locked
+            ) {
+                override fun actionPerformed(e: AnActionEvent) = onToggleLock()
+                override fun update(e: AnActionEvent) {
+                    val row = if (::jbTable.isInitialized) jbTable.selectedRow else -1
+                    if (row < 0) { e.presentation.isEnabled = false; return }
+                    e.presentation.isEnabled = true
+                    val locked = tableModel.isLocked(row, virtualFile)
+                    e.presentation.icon = if (locked) MyIcons.Locked else MyIcons.Unlocked
+                    e.presentation.text = if (locked) "Unlock" else "Lock"
+                }
+            })
+            .addExtraAction(object : AnAction(
                 "Refresh", "Re-parse strings file",
                 AllIcons.Actions.Refresh
             ) {
@@ -254,6 +292,8 @@ class I18nEditorPanel(
 
         add(decorated, BorderLayout.CENTER)
     }
+
+
 
     // ── Popups ────────────────────────────────────────────────────────────────
 
@@ -434,7 +474,8 @@ class I18nEditorPanel(
             keyName = dialog.keyName,
             valuesByLocaleTag = dialog.valuesByLocale,
             isLambda = dialog.isLambda,
-            lambdaParams = dialog.lambdaParams
+            lambdaParams = dialog.lambdaParams,
+            lambdaReturnType = dialog.lambdaReturnType
         )
         refresh()
         val fullPath = (dialog.selectedGroup.fieldPath + dialog.keyName).joinToString(".")
@@ -525,7 +566,7 @@ class I18nEditorPanel(
     private fun showLambdaParamDialog(key: I18nKey) {
         val dialog = EditLambdaParamsDialog(key)
         if (!dialog.showAndGet()) return
-        converter.convertToLambda(virtualFile, key, dialog.lambdaParams)
+        converter.convertToLambda(virtualFile, key, dialog.lambdaParams, dialog.lambdaReturnType)
         refresh()
     }
 
@@ -553,6 +594,17 @@ class I18nEditorPanel(
         private val headerFg = JBColor(Gray._50, Gray._210)
         private val INDENT = 16
 
+        private val lockIcon = MyIcons.Locked
+        private val keyPanel = JPanel(BorderLayout(4, 0)).apply { isOpaque = true }
+        private val lockLabel = JLabel()
+        private val keyLabel = JLabel()
+
+        init {
+            keyPanel.add(lockLabel, BorderLayout.WEST)
+            keyPanel.add(keyLabel, BorderLayout.CENTER)
+        }
+
+
         override fun getTableCellRendererComponent(
             table: JTable, value: Any?, isSelected: Boolean,
             hasFocus: Boolean, row: Int, column: Int
@@ -560,6 +612,7 @@ class I18nEditorPanel(
             super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
             val depth = tableModel.getDepth(row)
             val leftPad = 6 + depth * INDENT
+            val locked = tableModel.isLocked(row, virtualFile)
 
             when (val r = tableModel.getRow(row)) {
                 is I18nRow.GroupHeader -> {
@@ -571,34 +624,53 @@ class I18nEditorPanel(
                     background = if (isSelected) table.selectionBackground else groupBg
                     foreground = if (isSelected) table.selectionForeground else headerFg
                     border = JBUI.Borders.empty(0, leftPad, 0, 6)
+
+                    if (column == 0 && locked) {
+                        icon = MyIcons.Locked
+                        iconTextGap = 4
+                        foreground = JBColor(Color(160, 160, 160), Color(110, 110, 110))
+                        toolTipText = "Locked — edit directly in source"
+                    } else {
+                        icon = null
+                    }
                 }
 
                 is I18nRow.KeyRow -> {
-                    background = when {
-                        isSelected -> table.selectionBackground
-                        r.key.isLambda || r.key.isMap -> lambdaBg
-                        else -> table.background
-                    }
-                    foreground = when {
-                        isSelected -> table.selectionForeground
+                    val baseFg = when {
+                        isSelected  -> table.selectionForeground
+                        locked      -> JBColor(Color(160, 160, 160), Color(110, 110, 110))
                         r.key.isLambda -> JBColor(Color(120, 80, 180), Color(170, 130, 210))
                         r.key.isMap -> JBColor(Color(150, 100, 0), Color(180, 150, 80))
-                        else -> table.foreground
+                        else        -> table.foreground
                     }
+                    background = when {
+                        isSelected          -> table.selectionBackground
+                        r.key.isLambda || r.key.isMap -> lambdaBg
+                        else                -> table.background
+                    }
+                    foreground = baseFg
                     text = when {
                         column == 0 -> r.key.name
                         r.key.isMap -> "[map — not editable]"
-                        else -> value?.toString() ?: ""
+                        else        -> value?.toString() ?: ""
                     }
                     toolTipText = when {
-                        r.key.isLambda -> "λ  params: (${r.key.lambdaParams.joinToString(", ")})"
-                        r.key.isMap -> "Map — edit directly in source"
-                        else -> null
+                        locked          -> "Locked — edit directly in source"
+                        r.key.isLambda  -> "λ  params: (${r.key.lambdaParams.joinToString(", ")})"
+                        r.key.isMap     -> "Map — edit directly in source"
+                        else            -> null
                     }
                     border = if (column == 0)
                         JBUI.Borders.empty(0, leftPad, 0, 6)
                     else
                         JBUI.Borders.empty(0, 6)
+
+                    if (column == 0 && locked) {
+                        icon = MyIcons.Locked
+                        iconTextGap = 4
+                    } else {
+                        icon = null
+                    }
                 }
             }
             return this

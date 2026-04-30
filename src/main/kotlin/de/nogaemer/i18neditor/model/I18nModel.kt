@@ -29,14 +29,14 @@ data class I18nLocale(
  * @param isMap      True if the parameter type is a Map (e.g. Map<Locales, LanguageEntry>)
  */
 data class I18nKey(
-    val name:         String,
-    val fullPath:     String,      // e.g. "common.confirmButton"
-    val groupClass:   String,      // e.g. "CommonStrings"
-    val isLambda:     Boolean = false,
-    val isMap:        Boolean = false,
-    val lambdaParams: List<String> = emptyList() // e.g. ["teamName", "score"]
+    val name:             String,
+    val fullPath:         String,
+    val groupClass:       String,
+    val isLambda:         Boolean = false,
+    val isMap:            Boolean = false,
+    val lambdaParams:     List<String> = emptyList(), // e.g. ["wins: Int", "total: Int"]
+    val lambdaReturnType: String = "String"
 ) {
-    // Maps are never directly editable; everything else (including lambdas) is
     val isEditable: Boolean get() = !isMap
 }
 

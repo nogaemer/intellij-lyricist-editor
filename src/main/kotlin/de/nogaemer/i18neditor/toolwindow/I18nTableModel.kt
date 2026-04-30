@@ -1,8 +1,10 @@
 package de.nogaemer.i18neditor.toolwindow
 
+import com.intellij.openapi.vfs.VirtualFile
 import de.nogaemer.i18neditor.model.I18nGroup
 import de.nogaemer.i18neditor.model.I18nKey
 import de.nogaemer.i18neditor.model.I18nTable
+import de.nogaemer.i18neditor.util.LockManager
 import javax.swing.table.AbstractTableModel
 
 sealed class I18nRow {
@@ -42,6 +44,26 @@ class I18nTableModel(private var table: I18nTable) : AbstractTableModel() {
         if (col < 1) return
         r.values[locales[col - 1].tag] = value as? String
         fireTableCellUpdated(row, col)
+    }
+
+    fun isLocked(row: Int, file: VirtualFile): Boolean = when (val r = getRow(row)) {
+        is I18nRow.KeyRow -> {
+            // Locked directly, OR any ancestor group is locked
+            LockManager.isLocked(file, r.key.fullPath) ||
+                    r.key.fullPath.split(".").let { parts ->
+                        (1 until parts.size).any { i ->
+                            LockManager.isLocked(file, parts.take(i).joinToString("."))
+                        }
+                    }
+        }
+        is I18nRow.GroupHeader -> {
+            val path = r.group.fieldPath
+            // Locked directly, OR any ancestor group is locked
+            LockManager.isLocked(file, path.joinToString(".")) ||
+                    (1 until path.size).any { i ->
+                        LockManager.isLocked(file, path.take(i).joinToString("."))
+                    }
+        }
     }
 
     fun getRow(index: Int): I18nRow = rows[index]

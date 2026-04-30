@@ -176,15 +176,17 @@ class LyricistFileParser(private val project: Project) {
 
                 typeText.contains("->") -> {
                     val defaultArg = defaultArgs[paramName]
-                    val lambdaParams = extractLambdaParams(param.typeReference, defaultArg)
+                    val (params, returnType) = extractLambdaParamsAndReturn(param.typeReference, defaultArg)
                     leafKeys += I18nKey(
                         name = paramName,
                         fullPath = (pathSoFar + paramName).joinToString("."),
                         groupClass = ktClass.name ?: "",
                         isLambda = true,
-                        lambdaParams = lambdaParams
+                        lambdaParams = params,          // ["wins: Int", "total: Int"]
+                        lambdaReturnType = returnType   // "String"
                     )
                 }
+
 
                 typeText.startsWith("Map<") || typeText.startsWith("Map ") -> {
                     leafKeys += I18nKey(
@@ -292,27 +294,34 @@ class LyricistFileParser(private val project: Project) {
      * e.g.  { teamName, score -> "Go $teamName" }  →  ["teamName", "score"]
      * Falls back to ["p0", "p1", ...] based on the type arity if the lambda body is unavailable.
      */
-    private fun extractLambdaParams(
-        typeRef: org.jetbrains.kotlin.psi.KtTypeReference?,
-        defaultLocaleArg: org.jetbrains.kotlin.psi.KtExpression?
-    ): List<String> {
-        // Try to read param names from the lambda literal in the default locale value
-        if (defaultLocaleArg is org.jetbrains.kotlin.psi.KtLambdaExpression) {
-            val names = defaultLocaleArg.valueParameters.mapNotNull { it.name }
-            if (names.isNotEmpty()) return names
-        }
-        // Fall back: count functional type params from the type reference text
-        // e.g. "(String, String) -> String" → 2 params → ["p0", "p1"]
-        val typeText = typeRef?.text ?: return emptyList()
+    private fun extractLambdaParamsAndReturn(
+        typeRef: KtTypeReference?,
+        defaultLocaleArg: KtExpression?
+    ): Pair<List<String>, String> {
+        val typeText = typeRef?.text ?: return Pair(emptyList(), "String")
         val arrowIdx = typeText.indexOf("->")
-        if (arrowIdx < 0) return emptyList()
-        val paramSection = typeText.substring(1, arrowIdx).trim().trimEnd()
-        val count = if (paramSection.isBlank()) 0
-        else paramSection.split(",").size
-        return (0 until count).map { "p$it" }
+        if (arrowIdx < 0) return Pair(emptyList(), "String")
+
+        val returnType = typeText.substring(arrowIdx + 2).trim()
+        // everything between the outer parens before ->
+        val paramSection = typeText.substring(1, arrowIdx).trimEnd().trimEnd(')')
+            .trim()
+        val paramTypes = if (paramSection.isBlank()) emptyList()
+        else paramSection.split(",").map { it.trim() }
+
+        val paramNames = (defaultLocaleArg as? KtLambdaExpression)
+            ?.valueParameters?.mapNotNull { it.name }
+            ?.takeIf { it.size == paramTypes.size }
+
+        val params = paramTypes.mapIndexed { i, type ->
+            val name = paramNames?.getOrNull(i) ?: "p$i"
+            "$name: $type"
+        }
+        return Pair(params, returnType)
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+
+        // ── Helpers ───────────────────────────────────────────────────────────────
 
     /** Gets or creates the inner map for a key path. */
     private fun MutableMap<String, MutableMap<String, String?>>.bucket(key: String) =
