@@ -66,6 +66,15 @@ class I18nTableModel(private var table: I18nTable) : AbstractTableModel() {
         }
     }
 
+    fun groupForKey(key: I18nKey): I18nGroup? =
+        table.model.groups.firstOrNull { g: I18nGroup -> g.keys.any { it.fullPath == key.fullPath } }
+
+    fun getParentGroup(group: I18nGroup): I18nGroup? {
+        if (group.fieldPath.size <= 1) return null
+        val parentPath = group.fieldPath.dropLast(1)
+        return table.model.groups.firstOrNull { it.fieldPath == parentPath }
+    }
+
     fun getRow(index: Int): I18nRow = rows[index]
     fun getDepth(row: Int): Int = rows[row].depth
     fun getLocaleTag(col: Int): String? = locales.getOrNull(col - 1)?.tag
@@ -91,6 +100,11 @@ class I18nTableModel(private var table: I18nTable) : AbstractTableModel() {
 
     fun rowForKey(fullPath: String): Int =
         rows.indexOfFirst { it is I18nRow.KeyRow && it.key.fullPath == fullPath }
+
+    fun firstKeyInGroup(group: I18nGroup): I18nKey? =
+        rows.filterIsInstance<I18nRow.KeyRow>()
+            .firstOrNull { groupForKey(it.key)?.className == group.className }
+            ?.key
 
     fun isGroupHeader(row: Int) = getRow(row) is I18nRow.GroupHeader
 

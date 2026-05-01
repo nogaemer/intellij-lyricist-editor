@@ -8,15 +8,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cafe.adriel.lyricist.LocalStrings
-import cafe.adriel.lyricist.ProvideStrings
 import cafe.adriel.lyricist.rememberStrings
 import cafe.adriel.lyricist.strings
 
 @Composable
 fun App() {
+    // State for the currently selected language tag
+    var currentLang by remember { mutableStateOf("en") }
+
     val lyricist = rememberStrings(
         defaultLanguageTag = "en",
-        currentLanguageTag = "en"
+        currentLanguageTag = currentLang
     )
 
     val state by lyricist.state.collectAsState()
@@ -29,6 +31,15 @@ fun App() {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.Start
         ) {
+            // Language toggle button
+            Button(onClick = {
+                currentLang = if (currentLang == "en") "de" else "en"
+            }) {
+                Text(if (currentLang == "en") "Switch to German" else "Switch to English")
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             Text(
                 text = strings.common.appName,
                 style = MaterialTheme.typography.headlineLarge,

@@ -20,10 +20,16 @@ class LyricistLocaleDeleter(private val project: Project) {
                             && extractLocaleTag(p) == localeTag
                 } ?: return@runWriteCommandAction
 
-            // Also remove the blank line before the property
+            // Capture prev BEFORE deletion, only keep it if it belongs to the real file
             val prev = prop.prevSibling
-            prop.delete()
-            if (prev is PsiWhiteSpace) prev.delete()
+                ?.takeIf { it is PsiWhiteSpace && it.isValid && it.containingFile == ktFile }
+
+            // Delete whitespace + property as a range if possible, otherwise separately
+            if (prev != null) {
+                ktFile.deleteChildRange(prev, prop)
+            } else {
+                prop.delete()
+            }
         }, ktFile)
     }
 

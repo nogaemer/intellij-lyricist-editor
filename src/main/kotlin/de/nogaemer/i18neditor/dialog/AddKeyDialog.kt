@@ -74,13 +74,6 @@ class AddKeyDialog(private val fileModel: I18nFileModel, preselected: I18nGroup?
         row("Lambda params:",   lambdaParamField,       3)
         row("Return type:",     lambdaReturnTypeField,  4)
 
-        gc.gridx = 0; gc.gridy = 4; gc.gridwidth = 2; gc.weightx = 1.0
-        panel.add(JBLabel("Initial values:").apply {
-            border     = JBUI.Borders.emptyTop(6)
-            foreground = JBUI.CurrentTheme.Label.disabledForeground()
-        }, gc)
-        gc.gridwidth = 1
-
         var r = 5
         for ((locale, field) in valueFields) {
             field.emptyText.text = if (locale.isDefault) "Required" else "Optional"

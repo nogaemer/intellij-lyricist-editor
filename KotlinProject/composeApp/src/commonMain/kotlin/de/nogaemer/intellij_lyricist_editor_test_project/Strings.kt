@@ -12,7 +12,7 @@ data class CommonStrings(
     val appName: String,
     val ok: String,
     val cancel: String,
-    val save: String,
+    val save: String
 )
 
 data class HomeStrings(
@@ -26,26 +26,24 @@ data class GameStrings(
     val scoreLabel: String,
     val playerGreeting: (String) -> String,
     val scoreFormat: (Int, Int) -> String,
-    val level: LevelStrings,
+    val level: LevelStrings
 )
 
 data class LevelStrings(
     val current: String,
     val next: String,
-    val details: LevelDetails,
+    val details: LevelDetails
 )
 
 data class LevelDetails(
     val name: String,
-    val test: String,
     val description: String,
-    val bonus: BonusInfo,
+    val bonus: BonusInfo
 )
 
 data class BonusInfo(
     val title: String,
     val multiplierFormat: (Int) -> String,
-    val test: (Int, String) -> String,
 )
 
 @LyricistStrings(languageTag = "en", default = true)
@@ -54,7 +52,7 @@ val EnStrings = Strings(
         appName = "TestApp",
         ok = "OK",
         cancel = "Cancel",
-        save = "Save",
+        save = "Save"
     ),
     home = HomeStrings(
         title = "Welcome",
@@ -72,11 +70,9 @@ val EnStrings = Strings(
             details = LevelDetails(
                 name = "Forest of Beginnings",
                 description = "A dense forest with simple enemies.",
-                test = ",",
                 bonus = BonusInfo(
                     title = "Bonus stage!",
-                    multiplierFormat = { multiplier -> "x$multiplier points" },
-                    test = { test, test2 -> "$test + $test2" }
+                    multiplierFormat = { multiplier -> "x$multiplier points\\\\\\\"" },
                 )
             )
         )
@@ -89,7 +85,7 @@ val DeStrings = Strings(
         appName = "TestApp",
         ok = "OK",
         cancel = "Abbrechen",
-        save = "Speichern",
+        save = "Speichern"
     ),
     home = HomeStrings(
         title = "Willkommen",
@@ -107,11 +103,9 @@ val DeStrings = Strings(
             details = LevelDetails(
                 name = "Wald der Anfänge",
                 description = "Ein dichter Wald mit einfachen Gegnern.",
-                test = ",",
                 bonus = BonusInfo(
                     title = "Bonuslevel!",
-                    multiplierFormat = { multiplier -> "$multiplier-fache Punkte" },
-                    test = { test, test2 -> "$test + $test2" }
+                    multiplierFormat = { multiplier: Int -> "$multiplier-fache Punkte" },
                 )
             )
         )

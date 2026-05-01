@@ -208,13 +208,11 @@ class LyricistFileParser(private val project: Project) {
         }
 
         // Emit this group's own keys FIRST, before any nested groups
-        if (leafKeys.isNotEmpty()) {
-            result += I18nGroup(
-                className = ktClass.name ?: "",
-                fieldPath = pathSoFar,
-                keys = leafKeys
-            )
-        }
+        result += I18nGroup(
+            className = ktClass.name ?: "",
+            fieldPath = pathSoFar,
+            keys = leafKeys
+        )
 
         // Then recurse into nested groups in declaration order
         for ((paramName, nestedClass, nestedCall) in nestedGroups) {

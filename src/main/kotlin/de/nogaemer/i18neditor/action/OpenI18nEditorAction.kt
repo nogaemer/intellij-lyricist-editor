@@ -42,6 +42,9 @@ class OpenI18nEditorAction : DumbAwareAction() {
         val content2 = ContentFactory.getInstance()
             .createContent(panel, virtualFile.name, false)
 
+        toolWindow.contentManager.contents.forEach { content ->
+            (content.component as? I18nEditorPanel)?.dispose()
+        }
         toolWindow.contentManager.removeAllContents(true)
         toolWindow.contentManager.addContent(content2)
         toolWindow.show()

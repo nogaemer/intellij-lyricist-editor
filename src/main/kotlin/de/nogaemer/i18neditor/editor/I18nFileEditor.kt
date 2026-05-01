@@ -34,5 +34,7 @@ class I18nFileEditor(project: Project, private val file: VirtualFile) : FileEdit
     override fun <T> getUserData(key: Key<T>): T?          = userDataHolder.getUserData(key)
     override fun <T> putUserData(key: Key<T>, value: T?)   = userDataHolder.putUserData(key, value)
 
-    override fun dispose() {}
+    override fun dispose() {
+        panel.dispose()
+    }
 }

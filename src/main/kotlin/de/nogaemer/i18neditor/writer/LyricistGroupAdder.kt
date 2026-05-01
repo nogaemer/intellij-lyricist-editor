@@ -27,7 +27,7 @@ class LyricistGroupAdder(private val project: Project) {
                 .filter { it.isData() }
                 .lastOrNull() ?: return@runWriteCommandAction
 
-            val newClassSrc = "\n\ndata class $className(\n    val placeholder: String,\n)"
+            val newClassSrc = "\n\ndata class $className(\n)"
             val newClass    = factory.createClass(newClassSrc)
             val nlBefore    = PsiParserFacade.getInstance(project)
                 .createWhiteSpaceFromText("\n\n")
@@ -93,7 +93,7 @@ class LyricistGroupAdder(private val project: Project) {
                 val wsArg  = PsiParserFacade.getInstance(project)
                     .createWhiteSpaceFromText("\n        ")
                 val dummy  = factory.createExpression(
-                    "dummy($fieldName = $className(placeholder = \"\"))"
+                    "dummy($fieldName = $className())"
                 ) as? KtCallExpression ?: continue
                 val newArg = dummy.valueArguments.firstOrNull() ?: continue
 

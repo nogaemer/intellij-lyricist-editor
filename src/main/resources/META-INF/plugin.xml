@@ -1,12 +1,41 @@
 <idea-plugin>
     <id>de.nogaemer.i18neditor</id>
     <name>i18n Strings Editor</name>
-    <vendor>Noah Schwenold</vendor>
+    <version>1.0.0</version>
+
+    <vendor email="schwenoldnoah.dev@gmail.com" url="https://github.com/nogaemer">nogaemer</vendor>
+
+    <idea-version since-build="253"/>
+
     <description><![CDATA[
-        Visual editor for Lyricist-based Kotlin i18n string files.<br/>
-        Supports editing all locales side-by-side, adding/removing keys,
-        and full PSI-backed rename refactoring (Shift+F6).
+        <p>Visual side-by-side editor for <a href="https://github.com/adrielcafe/lyricist">Lyricist</a>-based Kotlin i18n string files.</p>
+        <ul>
+            <li>Edit all locales in a single table — no more jumping between files</li>
+            <li>Add, rename, and delete keys and groups with full PSI-backed refactoring</li>
+            <li>Shift+F6 rename with cross-file reference support</li>
+            <li>Lambda and Map key support with type-aware editing</li>
+            <li>Lock keys or entire groups to prevent accidental edits</li>
+            <li>Drag &amp; drop to reorder or move keys and groups across the tree</li>
+            <li>Add and remove locales without touching the source manually</li>
+            <li>Auto-refreshes when the file is changed externally</li>
+            <li>Click any cell to jump directly to that value in the source file</li>
+        </ul>
     ]]></description>
+
+    <change-notes><![CDATA[
+        <b>1.0.0</b>
+        <ul>
+            <li>Initial release</li>
+            <li>Side-by-side locale table editor</li>
+            <li>PSI-backed key/group add, rename, delete</li>
+            <li>Lambda and Map key support</li>
+            <li>Lock / unlock keys and groups</li>
+            <li>Drag &amp; drop reordering and cross-group moves</li>
+            <li>Multi-locale add/remove</li>
+            <li>Auto-refresh on external file changes</li>
+        </ul>
+    ]]></change-notes>
+
 
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.kotlin</depends>

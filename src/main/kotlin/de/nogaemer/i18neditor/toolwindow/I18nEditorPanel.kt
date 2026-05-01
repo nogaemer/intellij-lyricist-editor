@@ -37,6 +37,8 @@ import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtFile
 import java.awt.*
+import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.Transferable
 import java.awt.event.*
 import javax.swing.*
 import javax.swing.table.DefaultTableCellRenderer
@@ -51,6 +53,7 @@ class I18nEditorPanel(
     private val writer = LyricistStringWriter(project)
     private val adder = LyricistKeyAdder(project)
     private val deleter = LyricistKeyDeleter(project)
+    private val groupDeleter = LyricistGroupDeleter(project)
     private val groupAdder = LyricistGroupAdder(project)
     private val localeAdder = LyricistLocaleAdder(project)
     private val localeDeleter = LyricistLocaleDeleter(project)
@@ -87,6 +90,7 @@ class I18nEditorPanel(
 
     fun dispose() {
         busConnection?.disconnect()
+        busConnection = null
     }
 
     // ── Locking ────────────────────────────────────────────────────────────────
@@ -95,7 +99,7 @@ class I18nEditorPanel(
         val row = jbTable.selectedRow
         if (row < 0) return
         val path = when (val r = tableModel.getRow(row)) {
-            is I18nRow.KeyRow     -> r.key.fullPath
+            is I18nRow.KeyRow -> r.key.fullPath
             is I18nRow.GroupHeader -> r.group.fieldPath.joinToString(".")
         }
         LockManager.toggle(virtualFile, path)
@@ -104,6 +108,8 @@ class I18nEditorPanel(
 
 
     // ── Build ─────────────────────────────────────────────────────────────────
+    private var dragStartPoint: Point? = null
+    private var dragStartRow: Int = -1
 
     private fun buildUI() {
         val t = currentTable ?: return
@@ -117,6 +123,23 @@ class I18nEditorPanel(
                 return super.isCellEditable(row, column)
             }
 
+            override fun paintComponent(g: Graphics) {
+                super.paintComponent(g)
+                val dtr = dropTargetRow
+                if (dtr < 0) return
+                val g2 = g as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = JBUI.CurrentTheme.Link.Foreground.ENABLED
+                g2.stroke = BasicStroke(2f)
+                val y = if (dtr < rowCount) {
+                    getCellRect(dtr, 0, true).y
+                } else {
+                    val last = getCellRect(rowCount - 1, 0, true)
+                    last.y + last.height
+                }
+                g2.drawLine(0, y, width, y)
+                g2.fillPolygon(intArrayOf(0, 8, 0), intArrayOf(y - 4, y, y + 4), 3)
+            }
 
             override fun paint(g: Graphics) {
                 super.paint(g)
@@ -144,6 +167,7 @@ class I18nEditorPanel(
             fillsViewportHeight = true
             columnModel.getColumn(0).preferredWidth = 240
             columnModel.getColumn(0).minWidth = 140
+            setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
         }
 
         // ── Keyboard: Shift+F6 → rename ───────────────────────────────────────
@@ -169,13 +193,36 @@ class I18nEditorPanel(
             }
         })
 
-
         // ── Mouse: row clicks + right-click popup ─────────────────────────────
         jbTable.addMouseListener(object : MouseAdapter() {
 
             // Navigate locale value on mousePressed (before editor starts)
             override fun mousePressed(e: MouseEvent) {
-                // "+" button hit detection on group header rows
+                if (SwingUtilities.isLeftMouseButton(e) &&
+                    (e.modifiersEx and InputEvent.CTRL_DOWN_MASK) != 0) {
+                    val row = jbTable.rowAtPoint(e.point)
+                    val col = jbTable.columnAtPoint(e.point)
+                    if (row >= 0) {
+                        val r = tableModel.getRow(row) as? I18nRow.KeyRow
+                        if (r != null) {
+                            if (col == 0) {
+                                navigateToKey(r.key)
+                            } else {
+                                val tag = tableModel.getLocaleTag(col)
+                                if (tag != null) navigateToLocaleValue(r.key, tag)
+                            }
+                            e.consume()
+                            return
+                        }
+                    }
+                }
+
+
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    dragStartPoint = e.point
+                    dragStartRow = jbTable.rowAtPoint(e.point)
+                }
+
                 if (SwingUtilities.isLeftMouseButton(e)) {
                     val row = jbTable.rowAtPoint(e.point)
                     if (row >= 0 && tableModel.isGroupHeader(row)) {
@@ -191,35 +238,40 @@ class I18nEditorPanel(
                 }
 
                 maybeShowRowPopup(e)
-                if (e.isPopupTrigger || !SwingUtilities.isLeftMouseButton(e)) return
-                val row = jbTable.rowAtPoint(e.point)
-                if (row < 0) return
-                val r = tableModel.getRow(row) as? I18nRow.KeyRow ?: return
-                val col = jbTable.columnAtPoint(e.point)
-                if (col > 0 && e.clickCount == 1) {
-                    val tag = tableModel.getLocaleTag(col)
-                    if (tag != null) navigateToLocaleValue(r.key, tag)
-                }
             }
 
-            override fun mouseReleased(e: MouseEvent) = maybeShowRowPopup(e)
+            override fun mouseReleased(e: MouseEvent) {
+                dragStartPoint = null
+                dragStartRow = -1
+                maybeShowRowPopup(e)
+            }
 
             override fun mouseClicked(e: MouseEvent) {
-                if (groupAddButtonClicked) {
-                    groupAddButtonClicked = false; return
-                }
+                if (groupAddButtonClicked) { groupAddButtonClicked = false; return }
                 val row = jbTable.rowAtPoint(e.point)
                 if (row < 0) return
+
                 when (val r = tableModel.getRow(row)) {
                     is I18nRow.GroupHeader ->
-                        if (e.clickCount == 1 && !SwingUtilities.isRightMouseButton(e))
+                        if (e.clickCount == 2 && !SwingUtilities.isRightMouseButton(e))
                             tableModel.toggleCollapse(row)
 
-                    is I18nRow.KeyRow ->
-                        if (e.clickCount == 2 && SwingUtilities.isLeftMouseButton(e)
-                            && jbTable.columnAtPoint(e.point) == 0
-                        )
-                            navigateToKey(r.key)
+                    is I18nRow.KeyRow -> {
+                        val col = jbTable.columnAtPoint(e.point)
+                        when {
+                            // Double-click col 0 → navigate to key definition
+                            e.clickCount == 2 && SwingUtilities.isLeftMouseButton(e) && col == 0 ->
+                                navigateToKey(r.key)
+
+                            // Ctrl+click on value cell → navigate to that locale value
+                            e.clickCount == 1 && col > 0 &&
+                                    SwingUtilities.isLeftMouseButton(e) &&
+                                    (e.modifiersEx and InputEvent.CTRL_DOWN_MASK) != 0 -> {
+                                val tag = tableModel.getLocaleTag(col)
+                                if (tag != null) navigateToLocaleValue(r.key, tag)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -230,6 +282,32 @@ class I18nEditorPanel(
                 val r = tableModel.getRow(row) as? I18nRow.KeyRow ?: return
                 jbTable.selectionModel.setSelectionInterval(row, row)
                 showKeyPopup(e, r.key)
+            }
+        })
+
+        jbTable.addMouseMotionListener(object : MouseMotionAdapter() {
+            override fun mouseDragged(e: MouseEvent) {
+                val start = dragStartPoint ?: return
+                if (e.point.distance(start) < 8) return
+                val row = dragStartRow.takeIf { it >= 0 } ?: return
+
+                // Only start drag from the key column — value columns are edit-only
+                val col = jbTable.columnAtPoint(start)
+                if (col != 0) {
+                    dragStartPoint = null
+                    dragStartRow = -1
+                    return
+                }
+
+                if (tableModel.isLocked(row, virtualFile)) {
+                    dragStartPoint = null
+                    dragStartRow = -1
+                    return
+                }
+
+                dragStartPoint = null
+                dragStartRow = -1
+                jbTable.transferHandler?.exportAsDrag(jbTable, e, TransferHandler.MOVE)
             }
         })
 
@@ -275,7 +353,9 @@ class I18nEditorPanel(
                 override fun actionPerformed(e: AnActionEvent) = onToggleLock()
                 override fun update(e: AnActionEvent) {
                     val row = if (::jbTable.isInitialized) jbTable.selectedRow else -1
-                    if (row < 0) { e.presentation.isEnabled = false; return }
+                    if (row < 0) {
+                        e.presentation.isEnabled = false; return
+                    }
                     e.presentation.isEnabled = true
                     val locked = tableModel.isLocked(row, virtualFile)
                     e.presentation.icon = if (locked) MyIcons.Locked else MyIcons.Unlocked
@@ -291,8 +371,8 @@ class I18nEditorPanel(
             .createPanel()
 
         add(decorated, BorderLayout.CENTER)
+        installDragAndDrop()
     }
-
 
 
     // ── Popups ────────────────────────────────────────────────────────────────
@@ -330,6 +410,18 @@ class I18nEditorPanel(
         ) {
             override fun actionPerformed(ev: AnActionEvent) = onRenameKey()
         })
+        group.add(object : AnAction(
+            "Go to Source  (Ctrl+Click)", null,
+            AllIcons.Actions.StepOut
+        ) {
+            override fun actionPerformed(ev: AnActionEvent) {
+                val col = jbTable.selectedColumn
+                val tag = if (col > 0) tableModel.getLocaleTag(col) else null
+                if (tag != null) navigateToLocaleValue(key, tag)
+                else navigateToKey(key)
+            }
+        })
+
         group.addSeparator()
 
         if (!key.isLambda) {
@@ -412,7 +504,7 @@ class I18nEditorPanel(
             .firstOrNull { it.name == key.groupClass }
             ?.primaryConstructor?.valueParameters
             ?.firstOrNull { it.name == key.name } ?: return
-        OpenFileDescriptor(project, virtualFile, param.textOffset).navigate(true)
+        OpenFileDescriptor(project, virtualFile, param.textOffset).navigate(false)
     }
 
     private fun navigateToLocaleValue(key: I18nKey, localeTag: String) {
@@ -459,7 +551,7 @@ class I18nEditorPanel(
             } ?: return
 
         val offset = valueArg.getArgumentExpression()?.textOffset ?: return
-        OpenFileDescriptor(project, virtualFile, offset).navigate(true)
+        OpenFileDescriptor(project, virtualFile, offset).navigate(false)
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
@@ -490,6 +582,8 @@ class I18nEditorPanel(
         val t = currentTable ?: return
         val dialog = AddGroupDialog(t.model, preselected)
         if (!dialog.showAndGet()) return
+
+        // Create the group
         groupAdder.addGroup(
             virtualFile = virtualFile,
             className = dialog.className,
@@ -497,6 +591,43 @@ class I18nEditorPanel(
             parentPath = dialog.parentPath
         )
         refresh()
+
+        // Find the freshly created group in the updated model
+        val newGroup = currentTable?.model?.groups
+            ?.firstOrNull { it.className == dialog.className }
+
+        if (newGroup == null) {
+            // Group creation failed for some reason, nothing to roll back
+            return
+        }
+
+        // Immediately prompt for the first key
+        val keyDialog = AddKeyDialog(currentTable!!.model, newGroup)
+        if (!keyDialog.showAndGet()) {
+            // User cancelled → roll back the entire group
+            groupDeleter.deleteGroup(virtualFile, newGroup)
+            refresh()
+            return
+        }
+
+        adder.addKey(
+            virtualFile = virtualFile,
+            group = keyDialog.selectedGroup,
+            keyName = keyDialog.keyName,
+            valuesByLocaleTag = keyDialog.valuesByLocale,
+            isLambda = keyDialog.isLambda,
+            lambdaParams = keyDialog.lambdaParams,
+            lambdaReturnType = keyDialog.lambdaReturnType
+        )
+        refresh()
+
+        // Select the new key
+        val fullPath = (keyDialog.selectedGroup.fieldPath + keyDialog.keyName).joinToString(".")
+        val row = tableModel.rowForKey(fullPath)
+        if (row >= 0) {
+            jbTable.selectionModel.setSelectionInterval(row, row)
+            jbTable.scrollRectToVisible(jbTable.getCellRect(row, 0, true))
+        }
     }
 
     private fun onAddLocale() {
@@ -514,9 +645,32 @@ class I18nEditorPanel(
     private fun onDeleteKey() {
         val row = jbTable.selectedRow
         if (row < 0) return
-        val r = tableModel.getRow(row) as? I18nRow.KeyRow ?: return
-        deleter.deleteKey(virtualFile, r.key)
-        refresh()
+        when (val r = tableModel.getRow(row)) {
+            is I18nRow.KeyRow -> {
+                if (tableModel.isLocked(row, virtualFile)) return
+                deleter.deleteKey(virtualFile, r.key)
+                refresh()
+            }
+            is I18nRow.GroupHeader -> {
+                if (tableModel.isLocked(row, virtualFile)) return
+                val hasContent = r.group.keys.isNotEmpty() ||
+                        currentTable?.model?.groups?.any { g ->
+                            g.fieldPath.size > r.group.fieldPath.size &&
+                                    g.fieldPath.take(r.group.fieldPath.size) == r.group.fieldPath
+                        } == true
+                if (hasContent) {
+                    val ok = Messages.showYesNoDialog(
+                        project,
+                        "Delete group '${r.group.className}' and all its keys and subgroups?\nThis cannot be undone.",
+                        "Delete Group",
+                        Messages.getWarningIcon()
+                    )
+                    if (ok != Messages.YES) return
+                }
+                groupDeleter.deleteGroup(virtualFile, r.group)
+                refresh()
+            }
+        }
     }
 
     /**
@@ -567,6 +721,138 @@ class I18nEditorPanel(
         val dialog = EditLambdaParamsDialog(key)
         if (!dialog.showAndGet()) return
         converter.convertToLambda(virtualFile, key, dialog.lambdaParams, dialog.lambdaReturnType)
+        refresh()
+    }
+
+    // ── Drag & drop data ──────────────────────────────────────────────────────
+
+    private data class DragPayload(val row: Int, val data: I18nRow)
+
+    private var dropTargetRow: Int = -1  // -1 = none, row index = insert before that row
+    private val mover = LyricistNodeMover(project)
+
+    private fun installDragAndDrop() {
+        System.setProperty("awt.dnd.drag.threshold", "8")
+
+        jbTable.dragEnabled = false
+        jbTable.dropMode = DropMode.INSERT_ROWS
+        jbTable.transferHandler = object : TransferHandler() {
+
+            private val flavor = DataFlavor(DragPayload::class.java, "i18nRow")
+
+            override fun getSourceActions(c: JComponent) = MOVE
+
+            override fun createTransferable(c: JComponent): Transferable? {
+                val row = jbTable.selectedRow.takeIf { it >= 0 } ?: return null
+                if (tableModel.isLocked(row, virtualFile)) return null
+                val payload = DragPayload(row, tableModel.getRow(row))
+                return object : Transferable {
+                    override fun getTransferDataFlavors() = arrayOf(flavor)
+                    override fun isDataFlavorSupported(f: DataFlavor) = f == flavor
+                    override fun getTransferData(f: DataFlavor): Any = payload
+                }
+            }
+
+            override fun canImport(support: TransferSupport): Boolean {
+                if (!support.isDataFlavorSupported(flavor)) return false
+                val loc = (support.dropLocation as? JTable.DropLocation) ?: return false
+                val targetRow = loc.row.coerceIn(0, tableModel.rowCount)
+                // Can't drop onto a locked row
+                if (targetRow < tableModel.rowCount && tableModel.isLocked(targetRow, virtualFile)) return false
+                dropTargetRow = targetRow
+                jbTable.repaint()
+                return true
+            }
+
+            override fun importData(support: TransferSupport): Boolean {
+                if (!canImport(support)) return false
+                val payload = support.getTransferable().getTransferData(flavor) as? DragPayload ?: return false
+                val loc = support.dropLocation as? JTable.DropLocation ?: return false
+                val insertBeforeRow = loc.row.coerceIn(0, tableModel.rowCount)
+
+                dropTargetRow = -1
+                jbTable.repaint()
+
+                performMove(payload, insertBeforeRow)
+                return true
+            }
+
+            override fun exportDone(source: JComponent?, data: Transferable?, action: Int) {
+                dropTargetRow = -1
+                jbTable.repaint()
+            }
+        }
+    }
+
+    private fun performMove(payload: DragPayload, insertBeforeRow: Int) {
+        val targetRow = insertBeforeRow.coerceIn(0, tableModel.rowCount - 1)
+        if (targetRow == payload.row || targetRow == payload.row + 1) return
+
+        when (val dragged = payload.data) {
+            is I18nRow.KeyRow -> {
+                val key = dragged.key
+                val targetRowData = tableModel.getRow(targetRow)
+
+                val (targetGroup, beforeKey) = when (targetRowData) {
+                    is I18nRow.GroupHeader -> {
+                        val prevRow = targetRow - 1
+                        if (prevRow >= 0 && tableModel.getRow(prevRow) is I18nRow.KeyRow) {
+                            // Keep in the group above, insert at end
+                            val prevKey = (tableModel.getRow(prevRow) as I18nRow.KeyRow).key
+                            Pair(tableModel.groupForKey(prevKey), null)
+                        } else {
+                            // Genuinely dropping onto a group header → insert at top
+                            Pair(targetRowData.group, tableModel.firstKeyInGroup(targetRowData.group))
+                        }
+                    }
+                    is I18nRow.KeyRow -> Pair(tableModel.groupForKey(targetRowData.key), targetRowData.key)
+                }
+                if (targetGroup == null) return
+
+                if (targetGroup.className != key.groupClass &&
+                    targetGroup.keys.any { it.name == key.name }) {
+                    Messages.showWarningDialog(
+                        project,
+                        "Group '${targetGroup.className}' already contains a key named '${key.name}'.",
+                        "Move Cancelled"
+                    )
+                    return
+                }
+                mover.moveKey(virtualFile, key, targetGroup, beforeKey)
+            }
+
+            is I18nRow.GroupHeader -> {
+                val group = dragged.group
+                val targetRowData = if (targetRow < tableModel.rowCount)
+                    tableModel.getRow(targetRow) else null
+
+                val (targetParent, beforeGroup) = when (targetRowData) {
+                    // Dropping before another group header → become its sibling
+                    is I18nRow.GroupHeader ->
+                        Pair(tableModel.getParentGroup(targetRowData.group), targetRowData.group)
+
+                    // Dropping before a key row → insert into that key's owning group
+                    is I18nRow.KeyRow ->
+                        Pair(tableModel.groupForKey(targetRowData.key), null)
+
+                    // Dropping at the very end → keep same parent, append
+                    null ->
+                        Pair(tableModel.getParentGroup(group), null)
+                }
+
+                // Guard: can't move a group into itself or one of its own descendants
+                if (targetParent != null &&
+                    targetParent.fieldPath.size >= group.fieldPath.size &&
+                    targetParent.fieldPath.take(group.fieldPath.size) == group.fieldPath
+                ) return
+
+                // Guard: already in place (same parent, same before)
+                if (targetParent == tableModel.getParentGroup(group) &&
+                    beforeGroup == null && targetRowData == null) return
+
+                mover.moveGroup(virtualFile, group, targetParent, beforeGroup)
+            }
+        }
         refresh()
     }
 
@@ -637,28 +923,28 @@ class I18nEditorPanel(
 
                 is I18nRow.KeyRow -> {
                     val baseFg = when {
-                        isSelected  -> table.selectionForeground
-                        locked      -> JBColor(Color(160, 160, 160), Color(110, 110, 110))
+                        isSelected -> table.selectionForeground
+                        locked -> JBColor(Color(160, 160, 160), Color(110, 110, 110))
                         r.key.isLambda -> JBColor(Color(120, 80, 180), Color(170, 130, 210))
                         r.key.isMap -> JBColor(Color(150, 100, 0), Color(180, 150, 80))
-                        else        -> table.foreground
+                        else -> table.foreground
                     }
                     background = when {
-                        isSelected          -> table.selectionBackground
+                        isSelected -> table.selectionBackground
                         r.key.isLambda || r.key.isMap -> lambdaBg
-                        else                -> table.background
+                        else -> table.background
                     }
                     foreground = baseFg
                     text = when {
                         column == 0 -> r.key.name
                         r.key.isMap -> "[map — not editable]"
-                        else        -> value?.toString() ?: ""
+                        else -> value?.toString() ?: ""
                     }
                     toolTipText = when {
-                        locked          -> "Locked — edit directly in source"
-                        r.key.isLambda  -> "λ  params: (${r.key.lambdaParams.joinToString(", ")})"
-                        r.key.isMap     -> "Map — edit directly in source"
-                        else            -> null
+                        locked -> "Locked — edit directly in source"
+                        r.key.isLambda -> "λ  params: (${r.key.lambdaParams.joinToString(", ")})"
+                        r.key.isMap -> "Map — edit directly in source"
+                        else -> null
                     }
                     border = if (column == 0)
                         JBUI.Borders.empty(0, leftPad, 0, 6)
@@ -711,16 +997,6 @@ class I18nEditorPanel(
             editingRow = row; editingCol = col
             field.text = value?.toString() ?: ""
             field.border = JBUI.Borders.empty(0, 6)
-
-            // Navigate to the locale value definition when editing starts
-            if (col > 0) {
-                val r = tableModel.getRow(row) as? I18nRow.KeyRow
-                val tag = tableModel.getLocaleTag(col)
-                if (r != null && tag != null) {
-                    navigateToLocaleValue(r.key, tag)
-                }
-            }
-
             return field
         }
     }
