@@ -32,24 +32,18 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Rename artifact
+      - name: Locate build artifacts
         run: |
-          mv build/distributions/*.zip \
-             build/distributions/i18n-strings-editor-${{ steps.version.outputs.VERSION }}.zip
+          echo "--- build/distributions ---"
+          find build/distributions -type f || echo "empty"
+          echo "--- build/libs ---"
+          find build/libs -type f || echo "empty"
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "i18n Strings Editor ${{ github.ref_name }}"
-          body: |
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for what changed in this release.
+      - name: Copy plugin JAR
+        run: |
+          cp build/libs/i18n-editor-plugin-${{ steps.version.outputs.VERSION }}.jar \
+             build/distributions/i18n-editor-plugin-${{ steps.version.outputs.VERSION }}.jar
 
-            ### Installation
-            Download the zip below and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk**.
-          files: |
-            build/distributions/i18n-strings-editor-${{ steps.version.outputs.VERSION }}.zip
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
       - name: Zip KotlinProject
         run: |
           zip -r build/distributions/KotlinProject-${{ steps.version.outputs.VERSION }}.zip KotlinProject/
@@ -62,12 +56,12 @@ jobs:
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for what changed in this release.
 
             ### Installation
-            Download the plugin zip below and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk**.
+            Download the `.jar` below and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
             ### Test Project
             Download `KotlinProject` to try the plugin on a ready-made Lyricist setup without touching your own project.
           files: |
-            build/distributions/i18n-strings-editor-${{ steps.version.outputs.VERSION }}.zip
+            build/distributions/i18n-editor-plugin-${{ steps.version.outputs.VERSION }}.jar
             build/distributions/KotlinProject-${{ steps.version.outputs.VERSION }}.zip
           draft: false
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
