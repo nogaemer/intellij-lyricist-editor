@@ -9,17 +9,21 @@
 
     <description><![CDATA[
         <p>Visual side-by-side editor for <a href="https://github.com/adrielcafe/lyricist">Lyricist</a>-based Kotlin i18n string files.</p>
+        <p>Instead of jumping between data classes and locale properties manually, the plugin presents all your string keys
+        and their translations in a single table and writes every change directly back to the source file using IntelliJ's PSI infrastructure.</p>
         <ul>
             <li>Edit all locales in a single table — no more jumping between files</li>
             <li>Add, rename, and delete keys and groups with full PSI-backed refactoring</li>
-            <li>Shift+F6 rename with cross-file reference support</li>
+            <li><b>Shift+F6</b> rename with cross-file reference support</li>
             <li>Lambda and Map key support with type-aware editing</li>
             <li>Lock keys or entire groups to prevent accidental edits</li>
             <li>Drag &amp; drop to reorder or move keys and groups across the tree</li>
             <li>Add and remove locales without touching the source manually</li>
             <li>Auto-refreshes when the file is changed externally</li>
-            <li>Click any cell to jump directly to that value in the source file</li>
+            <li><b>Ctrl+Click</b> any cell to jump directly to that value in the source file</li>
         </ul>
+        <p>Requires a project using <a href="https://github.com/adrielcafe/lyricist">Lyricist</a> with at least one
+        <code>@LyricistStrings</code>-annotated property.</p>
     ]]></description>
 
     <change-notes><![CDATA[
@@ -33,9 +37,9 @@
             <li>Drag &amp; drop reordering and cross-group moves</li>
             <li>Multi-locale add/remove</li>
             <li>Auto-refresh on external file changes</li>
+            <li>Ctrl+Click navigation to source</li>
         </ul>
     ]]></change-notes>
-
 
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.kotlin</depends>
@@ -46,6 +50,7 @@
                 anchor="right"
                 secondary="false"
                 canCloseContents="false"
+                icon="/icons/pluginIcon.svg"
                 factoryClass="de.nogaemer.i18neditor.toolwindow.I18nToolWindowFactory"/>
 
         <fileEditorProvider
@@ -65,7 +70,8 @@
                 id="de.nogaemer.i18neditor.OpenI18nEditorAction"
                 class="de.nogaemer.i18neditor.action.OpenI18nEditorAction"
                 text="Open in i18n Editor"
-                description="Open the Lyricist strings file in the visual i18n editor">
+                description="Open the Lyricist strings file in the visual i18n editor"
+                icon="/icons/pluginIcon.svg">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu"      anchor="last"/>
         </action>

@@ -3,111 +3,91 @@ package de.nogaemer.intellij_lyricist_editor_test_project
 import cafe.adriel.lyricist.LyricistStrings
 
 data class Strings(
-    val common: CommonStrings,
     val home: HomeStrings,
-    val game: GameStrings,
+    val game: GameStrings
 )
 
 data class CommonStrings(
     val appName: String,
     val ok: String,
     val cancel: String,
-    val save: String
+    val save: String,
 )
 
 data class HomeStrings(
     val title: String,
     val subtitle: String,
     val startButton: String,
+    val common: CommonStrings
 )
 
 data class GameStrings(
     val roundLabel: String,
     val scoreLabel: String,
     val playerGreeting: (String) -> String,
-    val scoreFormat: (Int, Int) -> String,
-    val level: LevelStrings
-)
-
-data class LevelStrings(
-    val current: String,
-    val next: String,
-    val details: LevelDetails
-)
-
-data class LevelDetails(
-    val name: String,
-    val description: String,
-    val bonus: BonusInfo
-)
-
-data class BonusInfo(
-    val title: String,
-    val multiplierFormat: (Int) -> String,
+    val scoreFormat: (Int, Int) -> String
 )
 
 @LyricistStrings(languageTag = "en", default = true)
 val EnStrings = Strings(
-    common = CommonStrings(
-        appName = "TestApp",
-        ok = "OK",
-        cancel = "Cancel",
-        save = "Save"
-    ),
     home = HomeStrings(
         title = "Welcome",
         subtitle = "This is a test project for the i18n plugin",
         startButton = "Start Game",
+        common = CommonStrings(
+            appName = "TestApp",
+            ok = "OK",
+            cancel = "Cancel",
+            save = "Save",
+        )
     ),
     game = GameStrings(
         roundLabel = "Round",
         scoreLabel = "Scores",
         playerGreeting = { name -> "Hey $name, good luck!" },
-        scoreFormat = { correct, total -> "$correct / $total" },
-        level = LevelStrings(
-            current = "Current Level: Forest",
-            next = "Next Level: Cave",
-            details = LevelDetails(
-                name = "Forest of Beginnings",
-                description = "A dense forest with simple enemies.",
-                bonus = BonusInfo(
-                    title = "Bonus stage!",
-                    multiplierFormat = { multiplier -> "x$multiplier points\\\\\\\"" },
-                )
-            )
-        )
-    ),
+        scoreFormat = { correct, total -> "$correct / $total" }
+    )
 )
 
 @LyricistStrings(languageTag = "de")
 val DeStrings = Strings(
-    common = CommonStrings(
-        appName = "TestApp",
-        ok = "OK",
-        cancel = "Abbrechen",
-        save = "Speichern"
-    ),
     home = HomeStrings(
         title = "Willkommen",
         subtitle = "Das ist ein Testprojekt für das i18n-Plugin",
         startButton = "Spiel starten",
+        common = CommonStrings(
+            appName = "TestApp",
+            ok = "OK",
+            cancel = "Abbrechen",
+            save = "Speichern",
+        )
     ),
     game = GameStrings(
         roundLabel = "Runde",
         scoreLabel = "Punkte",
         playerGreeting = { name -> "Hey $name, viel Erfolg!" },
-        scoreFormat = { correct, total -> "$correct / $total" },
-        level = LevelStrings(
-            current = "Aktuelles Level: Wald",
-            next = "Nächstes Level: Höhle",
-            details = LevelDetails(
-                name = "Wald der Anfänge",
-                description = "Ein dichter Wald mit einfachen Gegnern.",
-                bonus = BonusInfo(
-                    title = "Bonuslevel!",
-                    multiplierFormat = { multiplier: Int -> "$multiplier-fache Punkte" },
-                )
-            )
+        scoreFormat = { correct, total -> "$correct / $total" }
+    )
+)
+
+@LyricistStrings(languageTag = "fr")
+val fStrings: Strings = Strings(
+    home = HomeStrings(
+        title = "asdfa",
+        subtitle = "asdf",
+        startButton = "asdf",
+        common = CommonStrings(
+            appName = "asdf",
+            ok = "asdf",
+            cancel = "asdf",
+            save = "asdf"
         )
     ),
+    game = GameStrings(
+        roundLabel = "asdf",
+        scoreLabel = "asdf",
+        playerGreeting = { name -> "asdf" },
+        scoreFormat = { correct, total -> "asd" }
+    )
 )
+
